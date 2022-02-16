@@ -14,9 +14,7 @@ import com.intellij.util.text.nullize
 import icons.AwsIcons
 import org.jetbrains.annotations.TestOnly
 import software.amazon.awssdk.services.toolkittelemetry.model.Sentiment
-import software.aws.toolkits.jetbrains.services.telemetry.ClientMetadata
 import software.aws.toolkits.resources.message
-import java.net.URLEncoder
 import javax.swing.ButtonGroup
 import javax.swing.JLabel
 import javax.swing.JPanel
@@ -88,20 +86,11 @@ class SubmitFeedbackPanel(initialSentiment: Sentiment? = null) {
         }
 
         val currentBody = comment ?: ""
-        githubLink.text = message("feedback.github.link", "$GITHUB_LINK_BASE${URLEncoder.encode("$currentBody\n\n$toolkitMetadata", Charsets.UTF_8.name())}")
+        githubLink.isVisible = currentBody.length > 0
+        githubLink.text = message("feedback.github.link", buildGithubIssueUrl(currentBody))
     }
 
     companion object {
         const val MAX_LENGTH = 2000 // backend restriction
-
-        private const val GITHUB_LINK_BASE = "https://github.com/aws/aws-toolkit-jetbrains/issues/new?body="
-        private val toolkitMetadata = ClientMetadata.DEFAULT_METADATA.let {
-            """
-                ---
-                Toolkit: ${it.productName} ${it.productVersion}
-                OS: ${it.os} ${it.osVersion}
-                IDE: ${it.parentProduct} ${it.parentProductVersion}
-            """.trimIndent()
-        }
     }
 }
