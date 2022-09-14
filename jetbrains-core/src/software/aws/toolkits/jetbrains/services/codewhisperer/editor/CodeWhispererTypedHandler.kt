@@ -28,7 +28,8 @@ class CodeWhispererTypedHandler : TypedHandlerDelegate(), CodeWhispererAutoTrigg
         }
 
         triggerOnIdle = projectCoroutineScope(project).launch {
-            while (!CodeWhispererInvocationStatus.getInstance().hasEnoughDelayToInvokeCodeWhisperer()) {
+            while (!CodeWhispererInvocationStatus.getInstance().hasEnoughDelayToInvokeCodeWhisperer() ||
+                CodeWhispererInvocationStatus.getInstance().hasExistingInvocation()) {
                 if (!isActive) return@launch
                 delay(CodeWhispererConstants.POPUP_DELAY_CHECK_INTERVAL)
             }
