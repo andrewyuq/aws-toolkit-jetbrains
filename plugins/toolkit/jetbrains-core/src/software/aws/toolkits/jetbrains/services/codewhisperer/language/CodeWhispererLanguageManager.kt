@@ -123,6 +123,8 @@ class CodeWhispererLanguageManager {
             listOf("go") to CodeWhispererGo.INSTANCE,
             listOf("php") to CodeWhispererPhp.INSTANCE,
             listOf("sql") to CodeWhispererSql.INSTANCE,
+            listOf("gs") to CodeWhispererJava.INSTANCE,
+            listOf("gsx") to CodeWhispererJava.INSTANCE,
             listOf("txt") to CodeWhispererPlainText.INSTANCE
         ).map {
             val exts = it.first
