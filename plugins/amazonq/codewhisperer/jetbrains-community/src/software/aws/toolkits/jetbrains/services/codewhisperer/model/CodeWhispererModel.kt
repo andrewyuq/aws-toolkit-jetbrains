@@ -119,6 +119,8 @@ data class DetailContext(
     val isTruncatedOnRight: Boolean,
     val rightOverlap: String = "",
     val completionType: CodewhispererCompletionType,
+    var hasSeen: Boolean = false,
+    var isAccepted: Boolean = false
 )
 
 data class SessionContext(

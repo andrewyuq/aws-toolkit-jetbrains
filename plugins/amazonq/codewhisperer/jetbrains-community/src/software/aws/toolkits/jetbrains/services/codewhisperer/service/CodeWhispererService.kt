@@ -100,6 +100,7 @@ class CodeWhispererService(private val cs: CoroutineScope) : Disposable {
     val ongoingRequestsContext = mutableMapOf<Int, RequestContext>()
     private var jobId = 0
     private var sessionContext: SessionContext? = null
+    var isBetaExpired: Boolean = false
 
     init {
         Disposer.register(this, codeInsightSettingsFacade)
@@ -137,6 +138,11 @@ class CodeWhispererService(private val cs: CoroutineScope) : Disposable {
             if (shouldReauth) {
                 return
             }
+        }
+
+        if (isBetaExpired && triggerTypeInfo.triggerType == CodewhispererTriggerType.OnDemand) {
+            showCodeWhispererInfoHint(editor, "Current beta period ended, please switch to the marketplace version")
+            return
         }
 
         latencyContext.credentialFetchingEnd = System.nanoTime()
@@ -261,6 +267,7 @@ class CodeWhispererService(private val cs: CoroutineScope) : Disposable {
                     ApplicationManager.getApplication().messageBus.syncPublisher(CODEWHISPERER_CODE_COMPLETION_PERFORMED)
                         .onSuccess(requestContext.fileContextInfo)
                     CodeWhispererTelemetryService.getInstance().sendServiceInvocationEvent(
+                        currentJobId,
                         requestId,
                         requestContext,
                         responseContext,
@@ -358,6 +365,7 @@ class CodeWhispererService(private val cs: CoroutineScope) : Disposable {
                     val responseContext = ResponseContext(sessionId)
 
                     CodeWhispererTelemetryService.getInstance().sendServiceInvocationEvent(
+                        currentJobId,
                         requestId,
                         requestContext,
                         responseContext,
@@ -425,6 +433,7 @@ class CodeWhispererService(private val cs: CoroutineScope) : Disposable {
                 CodeWhispererInvocationStatus.getInstance().setInvocationSessionId(sessionId)
                 logServiceInvocation(requestId, requestContext, responseContext, emptyList(), null, exceptionType)
                 CodeWhispererTelemetryService.getInstance().sendServiceInvocationEvent(
+                    currentJobId,
                     requestId,
                     requestContext,
                     responseContext,
@@ -685,10 +694,6 @@ class CodeWhispererService(private val cs: CoroutineScope) : Disposable {
     }
 
     fun getAllSuggestionsPreviewInfo() =
-//        ongoingRequests.filter { it.second != null }.map { element ->
-//            val context = element.second?.recommendationContext ?: return@map
-//            context.details.map { PreviewContext(context.jobId, it, context.userInputSinceInvocation, context.typeahead) }
-//        }
         ongoingRequests.values.filterNotNull().flatMap { element ->
             val context = element.recommendationContext
             context.details.map {
