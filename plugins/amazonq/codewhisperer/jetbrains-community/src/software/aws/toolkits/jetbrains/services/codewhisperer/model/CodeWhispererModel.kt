@@ -134,6 +134,16 @@ data class SessionContext(
     var hasAccepted: Boolean = false
 ) : Disposable {
     private var isDisposed = false
+    init {
+        project.messageBus.connect().subscribe(
+            CodeWhispererService.CODEWHISPERER_INTELLISENSE_POPUP_ON_HOVER,
+            object : CodeWhispererIntelliSenseOnHoverListener {
+                override fun onEnter() {
+                    CodeWhispererPopupManager.getInstance().bringSuggestionInlayToFront(editor, popup, opposite = true)
+                }
+            }
+        )
+    }
 
     @RequiresEdt
     override fun dispose() {
@@ -142,6 +152,7 @@ data class SessionContext(
             hasAccepted,
             CodeWhispererInvocationStatus.getInstance().popupStartTimestamp?.let { Duration.between(it, Instant.now()) }
         )
+        setIntelliSensePopupAlpha(editor, 0f)
         CodeWhispererInvocationStatus.getInstance().setDisplaySessionActive(false)
 
         if (hasAccepted) {
