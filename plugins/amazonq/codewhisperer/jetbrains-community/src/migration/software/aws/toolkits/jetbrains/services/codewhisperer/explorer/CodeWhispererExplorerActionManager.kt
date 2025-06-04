@@ -13,7 +13,7 @@ import software.aws.toolkits.core.utils.getLogger
 import software.aws.toolkits.core.utils.warn
 import software.aws.toolkits.jetbrains.core.credentials.AwsBearerTokenConnection
 import software.aws.toolkits.jetbrains.core.credentials.ToolkitConnectionManager
-import software.aws.toolkits.jetbrains.core.credentials.pinning.CodeWhispererConnection
+import software.aws.toolkits.jetbrains.core.credentials.pinning.QConnection
 import software.aws.toolkits.jetbrains.core.credentials.sono.isSono
 import software.aws.toolkits.jetbrains.core.credentials.sso.bearer.BearerTokenAuthState
 import software.aws.toolkits.jetbrains.core.credentials.sso.bearer.BearerTokenProvider
@@ -38,7 +38,7 @@ class CodeWhispererExplorerActionManager : PersistentStateComponent<CodeWhispere
     }
 
     private fun getCodeWhispererConnectionStartUrl(project: Project): String {
-        val connection = ToolkitConnectionManager.getInstance(project).activeConnectionForFeature(CodeWhispererConnection.getInstance())
+        val connection = ToolkitConnectionManager.getInstance(project).activeConnectionForFeature(QConnection.getInstance())
         return getConnectionStartUrl(connection) ?: CodeWhispererConstants.ACCOUNTLESS_START_URL
     }
 
@@ -95,22 +95,8 @@ class CodeWhispererExplorerActionManager : PersistentStateComponent<CodeWhispere
         actionState.value[CodeWhispererExploreStateType.IsFirstRestartAfterQInstall] = isFirstRestartAfterQInstall
     }
 
-    @Deprecated("Accountless credential will be removed soon")
-    @ApiStatus.ScheduledForRemoval
-    // Will keep it for existing accountless users
-    /**
-     * Will be called from CodeWhispererService.showRecommendationInPopup()
-     * Caller (e.x. CodeWhispererService) should take care if null value returned, popup a notification/hint window or dialog etc.
-     */
-    fun resolveAccessToken(): String? {
-        if (actionState.token == null) {
-            LOG.warn { "Logical Error: Try to get access token before token initialization" }
-        }
-        return actionState.token
-    }
-
     fun checkActiveCodeWhispererConnectionType(project: Project): CodeWhispererLoginType {
-        val conn = ToolkitConnectionManager.getInstance(project).activeConnectionForFeature(CodeWhispererConnection.getInstance()) as? AwsBearerTokenConnection
+        val conn = ToolkitConnectionManager.getInstance(project).activeConnectionForFeature(QConnection.getInstance()) as? AwsBearerTokenConnection
         return conn?.let {
             val provider = (it.getConnectionSettings().tokenProvider.delegate as? BearerTokenProvider) ?: return@let CodeWhispererLoginType.Logout
 

@@ -12,7 +12,6 @@ import com.intellij.openapi.project.Project
 import software.aws.toolkits.jetbrains.core.credentials.AwsBearerTokenConnection
 import software.aws.toolkits.jetbrains.core.credentials.ToolkitConnectionManager
 import software.aws.toolkits.jetbrains.core.credentials.actions.SsoLogoutAction
-import software.aws.toolkits.jetbrains.core.credentials.pinning.CodeWhispererConnection
 import software.aws.toolkits.jetbrains.core.credentials.pinning.QConnection
 import software.aws.toolkits.jetbrains.core.credentials.sono.isSono
 import software.aws.toolkits.jetbrains.services.amazonq.actions.QSwitchProfilesAction
@@ -69,7 +68,7 @@ class QStatusBarLoggedInActionGroup : DefaultActionGroup() {
                 ToolkitConnectionManager.getInstance(it).activeConnectionForFeature(QConnection.getInstance()) as? AwsBearerTokenConnection
                 )?.takeIf { !it.isSono() }
                 ?.let { add(QSwitchProfilesAction()) }
-            ToolkitConnectionManager.getInstance(it).activeConnectionForFeature(CodeWhispererConnection.getInstance())?.let { c ->
+            ToolkitConnectionManager.getInstance(it).activeConnectionForFeature(QConnection.getInstance())?.let { c ->
                 (c as? AwsBearerTokenConnection)?.let { connection ->
                     add(SsoLogoutAction(connection))
                 }
