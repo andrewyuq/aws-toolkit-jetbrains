@@ -62,6 +62,9 @@
                              order="first, before editorEnter"/>
         <actionPromoter order="last" implementation="software.aws.toolkits.jetbrains.services.codewhisperer.actions.CodeWhispererActionPromoter"/>
         <fileEditorProvider implementation="software.aws.toolkits.jetbrains.services.codewhisperer.learn.LearnCodeWhispererEditorProvider"/>
+
+        <!-- Inline Completion Provider -->
+        <inline.completion.provider id="amazon.q" implementation="software.aws.toolkits.jetbrains.services.codewhisperer.popup.QInlineCompletionProvider"/>
     </extensions>
 
     <extensions defaultExtensionNs="aws.toolkit.core">

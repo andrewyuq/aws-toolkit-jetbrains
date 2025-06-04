@@ -3,17 +3,22 @@
 
 package software.aws.toolkits.jetbrains.services.codewhisperer.actions
 
+import com.intellij.codeInsight.inline.completion.InlineCompletion
+import com.intellij.codeInsight.inline.completion.InlineCompletionEvent
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.util.Key
+import com.intellij.openapi.util.UserDataHolder
+import com.intellij.openapi.util.UserDataHolderBase
 import kotlinx.coroutines.Job
 import software.aws.toolkits.jetbrains.services.amazonq.CodeWhispererFeatureConfigService
 import software.aws.toolkits.jetbrains.services.amazonq.profile.QRegionProfileManager
 import software.aws.toolkits.jetbrains.services.codewhisperer.model.LatencyContext
 import software.aws.toolkits.jetbrains.services.codewhisperer.model.TriggerTypeInfo
+import software.aws.toolkits.jetbrains.services.codewhisperer.popup.QInlineCompletionProvider
 import software.aws.toolkits.jetbrains.services.codewhisperer.service.CodeWhispererAutomatedTriggerType
 import software.aws.toolkits.jetbrains.services.codewhisperer.service.CodeWhispererService
 import software.aws.toolkits.jetbrains.services.codewhisperer.service.CodeWhispererServiceNew
@@ -48,13 +53,16 @@ class CodeWhispererRecommendationAction : AnAction(message("codewhisperer.trigge
         }
 
         val triggerType = TriggerTypeInfo(CodewhispererTriggerType.OnDemand, CodeWhispererAutomatedTriggerType.Unknown())
-        val job = if (CodeWhispererFeatureConfigService.getInstance().getNewAutoTriggerUX()) {
-            CodeWhispererServiceNew.getInstance().showRecommendationsInPopup(editor, triggerType, latencyContext)
-        } else {
-            CodeWhispererService.getInstance().showRecommendationsInPopup(editor, triggerType, latencyContext)
-        }
+//        val job = if (CodeWhispererFeatureConfigService.getInstance().getNewAutoTriggerUX()) {
+//            CodeWhispererServiceNew.getInstance().showRecommendationsInPopup(editor, triggerType, latencyContext)
+//        } else {
+//            CodeWhispererService.getInstance().showRecommendationsInPopup(editor, triggerType, latencyContext)
+//        }
+//        e.getData(CommonDataKeys.EDITOR)?.getUserData(ACTION_JOB_KEY)?.set(job)
+        InlineCompletion.getHandlerOrNull(editor)?.invokeEvent(
+            InlineCompletionEvent.ManualCall(editor, QInlineCompletionProvider.Q_INLINE_PROVIDER_ID, editor)
+        )
 
-        e.getData(CommonDataKeys.EDITOR)?.getUserData(ACTION_JOB_KEY)?.set(job)
     }
 
     companion object {
