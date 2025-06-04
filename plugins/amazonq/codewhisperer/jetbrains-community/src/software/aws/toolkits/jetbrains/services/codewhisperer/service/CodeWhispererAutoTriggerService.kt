@@ -58,10 +58,11 @@ class CodeWhispererAutoTriggerService : CodeWhispererAutoTriggerHandler, Disposa
         }
 
         val coroutineScope = applicationCoroutineScope()
+        return null
 
-        return coroutineScope.launch(EDT) {
-            performAutomatedTriggerAction(editor, triggerType, latencyContext)
-        }
+//        return coroutineScope.launch(EDT) {
+//            performAutomatedTriggerAction(editor, triggerType, latencyContext)
+//        }
     }
 
     private fun scheduleReset() {

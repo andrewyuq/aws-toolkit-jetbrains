@@ -33,12 +33,14 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import migration.software.aws.toolkits.jetbrains.services.codewhisperer.explorer.CodeWhispererExplorerActionManager
 import org.eclipse.lsp4j.jsonrpc.messages.Either
 import software.aws.toolkits.core.utils.debug
 import software.aws.toolkits.jetbrains.core.coroutines.getCoroutineBgContext
 import software.aws.toolkits.jetbrains.services.amazonq.lsp.AmazonQLspService
 import software.aws.toolkits.jetbrains.services.amazonq.lsp.model.aws.textDocument.InlineCompletionItem
 import software.aws.toolkits.jetbrains.services.amazonq.lsp.model.aws.textDocument.InlineCompletionListWithReferences
+import software.aws.toolkits.jetbrains.services.amazonq.profile.QRegionProfileManager
 import software.aws.toolkits.jetbrains.services.codewhisperer.model.TriggerTypeInfo
 import software.aws.toolkits.jetbrains.services.codewhisperer.service.CodeWhispererService
 import software.aws.toolkits.jetbrains.services.codewhisperer.util.CodeWhispererConstants
@@ -51,7 +53,7 @@ import javax.swing.JComponent
 import javax.swing.JLabel
 
 class QInlineCompletionProvider(private val cs: CoroutineScope) : InlineCompletionProvider {
-    override val id: InlineCompletionProviderID = InlineCompletionProviderID("Amazon Q")
+    override val id: InlineCompletionProviderID = Q_INLINE_PROVIDER_ID
     override val providerPresentation: InlineCompletionProviderPresentation
         get() = object : InlineCompletionProviderPresentation {
             override fun getTooltip(project: Project?): JComponent {
@@ -62,6 +64,7 @@ class QInlineCompletionProvider(private val cs: CoroutineScope) : InlineCompleti
         }
     companion object {
         private const val MAX_CHANNELS = 5
+        val Q_INLINE_PROVIDER_ID = InlineCompletionProviderID("Amazon Q")
 //        fun getInstance(): QInlineCompletionProvider {
 //            return QInlineCompletionProvider()
 //        }
@@ -97,9 +100,10 @@ class QInlineCompletionProvider(private val cs: CoroutineScope) : InlineCompleti
 
         try {
             val triggerTypeInfo = TriggerTypeInfo(
-                triggerType = CodewhispererTriggerType.AutoTrigger,
+                triggerType = if (request.event is InlineCompletionEvent.ManualCall) CodewhispererTriggerType.OnDemand else CodewhispererTriggerType.AutoTrigger,
                 automatedTriggerType = software.aws.toolkits.jetbrains.services.codewhisperer.service.CodeWhispererAutomatedTriggerType.Classifier()
             )
+            println("trigger type: ${triggerTypeInfo.triggerType}")
 
             // Get first page of completions
             val completionResult = withContext(getCoroutineBgContext()) {
@@ -308,11 +312,14 @@ class QInlineCompletionProvider(private val cs: CoroutineScope) : InlineCompleti
         val project = editor.project ?: return false
 
         if (!isQConnected(project)) return false
+        // Temporarily disable backspace
+        if (event is InlineCompletionEvent.Backspace) return false
+        if (!CodeWhispererExplorerActionManager.getInstance().isAutoEnabled()) return false
+        if (QRegionProfileManager.getInstance().hasValidConnectionButNoActiveProfile(project)) return false
 //        if (type == CodewhispererTriggerType.AutoTrigger && !CodeWhispererExplorerActionManager.getInstance().isAutoEnabled()) {
 //            LOG.debug { "CodeWhisperer auto-trigger is disabled, not invoking service" }
 //            return false
 //        }
-
         return true
     }
 
