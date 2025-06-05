@@ -258,6 +258,18 @@ class QInlineCompletionProvider(private val cs: CoroutineScope) : InlineCompleti
             }
 
             logger.debug("Pagination completed for session: $sessionId")
+            val session = InlineCompletionSession.getOrNull(editor) ?: return@withContext
+            println("list")
+            println(session.context.state.elements)
+            for (element in session.context.state.elements) {
+                println(element.element.text)
+            }
+            runInEdt {
+                println("capture")
+                println(session.capture())
+                println("list")
+                println(session.context.state.elements)
+            }
 
             // Close all 5 channels when pagination is complete
             (0 until MAX_CHANNELS).forEach { channelIndex ->
