@@ -389,8 +389,8 @@ private class AmazonQServerInstance(private val project: Project, private val cs
 
         val cmd = NodeExePatcher.patch(nodePath)
             .withParameters(
-//                "--inspect-brk=5050",
-//                "--nolazy",
+                "--inspect-brk=5055",
+                "--nolazy",
                 LspSettings.getInstance().getArtifactPath() ?: artifact.resolve("aws-lsp-codewhisperer.js").toString(),
                 "--stdio",
                 "--set-credentials-encryption-key",

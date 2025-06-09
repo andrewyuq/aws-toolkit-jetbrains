@@ -17,12 +17,14 @@ import com.intellij.codeInsight.inline.completion.suggestion.InlineCompletionVar
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.application.runInEdt
+import com.intellij.openapi.application.runReadAction
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.project.Project
 import com.intellij.vcs.log.runInEdtAsync
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.channels.Channel
@@ -97,6 +99,13 @@ class QInlineCompletionProvider(private val cs: CoroutineScope) : InlineCompleti
         val project = editor.project ?: return InlineCompletionSuggestion.Empty
 
         logger.debug("Getting inline completion suggestion for offset: ${request.endOffset}")
+        runReadAction {
+            println("Getting inline completion suggestion for offset: ${request.endOffset}, left text of current line: ${request.document.text.subSequence(request.document.getLineStartOffset(request.document.getLineNumber(request.editor.caretModel.offset)), request.editor.caretModel.offset)}")
+        }
+        val triggerType = if (request.event is InlineCompletionEvent.ManualCall) CodewhispererTriggerType.OnDemand else CodewhispererTriggerType.AutoTrigger
+        if (triggerType == CodewhispererTriggerType.AutoTrigger) {
+            val a = 1
+        }
 
         try {
             val triggerTypeInfo = TriggerTypeInfo(
@@ -182,6 +191,12 @@ class QInlineCompletionProvider(private val cs: CoroutineScope) : InlineCompleti
             }
 
         } catch (e: Exception) {
+            if (e is CancellationException) {
+                println("request at offset ${request.endOffset} cancelled, trigger type: ${if (request.event is InlineCompletionEvent.ManualCall) CodewhispererTriggerType.OnDemand else CodewhispererTriggerType.AutoTrigger}")
+                // TODO YUX: send discard events
+                throw e
+            }
+            println("request at offset ${request.endOffset} returning empty, trigger type: ${if (request.event is InlineCompletionEvent.ManualCall) CodewhispererTriggerType.OnDemand else CodewhispererTriggerType.AutoTrigger}")
             logger.warn("Error getting inline completion suggestion", e)
             return InlineCompletionSuggestion.Empty
         }
@@ -259,17 +274,17 @@ class QInlineCompletionProvider(private val cs: CoroutineScope) : InlineCompleti
 
             logger.debug("Pagination completed for session: $sessionId")
             val session = InlineCompletionSession.getOrNull(editor) ?: return@withContext
-            println("list")
-            println(session.context.state.elements)
+            println("all elements")
+//            println(session.context.state.elements)
             for (element in session.context.state.elements) {
                 println(element.element.text)
             }
-            runInEdt {
-                println("capture")
-                println(session.capture())
-                println("list")
-                println(session.context.state.elements)
-            }
+//            runInEdt {
+//                println("capture")
+//                println(session.capture())
+//                println("list")
+//                println(session.context.state.elements)
+//            }
 
             // Close all 5 channels when pagination is complete
             (0 until MAX_CHANNELS).forEach { channelIndex ->

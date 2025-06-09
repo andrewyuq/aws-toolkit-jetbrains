@@ -58,11 +58,11 @@ class CodeWhispererRecommendationAction : AnAction(message("codewhisperer.trigge
 //        } else {
 //            CodeWhispererService.getInstance().showRecommendationsInPopup(editor, triggerType, latencyContext)
 //        }
+//        e.getData(CommonDataKeys.EDITOR)?.getUserData(ACTION_JOB_KEY)?.set(job)
         InlineCompletion.getHandlerOrNull(editor)?.invokeEvent(
             InlineCompletionEvent.ManualCall(editor, QInlineCompletionProvider.Q_INLINE_PROVIDER_ID, editor)
         )
 
-//        e.getData(CommonDataKeys.EDITOR)?.getUserData(ACTION_JOB_KEY)?.set(job)
     }
 
     companion object {
