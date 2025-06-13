@@ -3,66 +3,66 @@
 
 package software.aws.toolkits.jetbrains.services.codewhisperer.popup
 
-import com.intellij.codeInsight.inline.completion.InlineCompletion
-import com.intellij.codeInsight.inline.completion.InlineCompletionEvent
-import com.intellij.codeInsight.inline.completion.InlineCompletionEventAdapter
-import com.intellij.codeInsight.inline.completion.InlineCompletionEventListener
-import com.intellij.codeInsight.inline.completion.InlineCompletionEventType
-import com.intellij.codeInsight.inline.completion.InlineCompletionHandler
-import com.intellij.codeInsight.inline.completion.InlineCompletionProvider
-import com.intellij.codeInsight.inline.completion.InlineCompletionProviderID
-import com.intellij.codeInsight.inline.completion.InlineCompletionProviderPresentation
-import com.intellij.codeInsight.inline.completion.InlineCompletionRequest
+//import software.aws.toolkits.jetbrains.services.codewhisperer.util.isCodeWhispererEnabled
+//import software.aws.toolkits.jetbrains.services.codewhisperer.util.isQExpired
+//import software.aws.toolkits.jetbrains.services.codewhisperer.util.isValidCodeWhispererFile
+import androidx.collection.mutableIntIntMapOf
+import com.intellij.codeInsight.hint.HintManager
+import com.intellij.codeInsight.inline.completion.*
 import com.intellij.codeInsight.inline.completion.elements.InlineCompletionElement
 import com.intellij.codeInsight.inline.completion.elements.InlineCompletionGrayTextElement
 import com.intellij.codeInsight.inline.completion.logs.InlineCompletionUsageTracker
 import com.intellij.codeInsight.inline.completion.session.InlineCompletionSession
-import com.intellij.codeInsight.inline.completion.suggestion.InlineCompletionSingleSuggestion
 import com.intellij.codeInsight.inline.completion.suggestion.InlineCompletionSuggestion
 import com.intellij.codeInsight.inline.completion.suggestion.InlineCompletionVariant
+import com.intellij.icons.AllIcons
+import com.intellij.openapi.actionSystem.*
+import com.intellij.openapi.actionSystem.ex.ActionUtil
+import com.intellij.openapi.actionSystem.impl.ActionButton
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.application.runInEdt
 import com.intellij.openapi.application.runReadAction
-import com.intellij.openapi.components.Service
-import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
+import com.intellij.openapi.util.Key
+import com.intellij.openapi.util.UserDataHolderBase
+import com.intellij.ui.components.ActionLink
+import com.intellij.ui.dsl.builder.*
+import com.intellij.ui.dsl.gridLayout.UnscaledGaps
 import com.intellij.util.progress.sleepCancellable
-import com.intellij.vcs.log.runInEdtAsync
+import com.intellij.util.ui.JBUI
+import icons.AwsIcons
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.emitAll
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import migration.software.aws.toolkits.jetbrains.services.codewhisperer.explorer.CodeWhispererExplorerActionManager
 import org.eclipse.lsp4j.jsonrpc.messages.Either
-import software.aws.toolkits.core.utils.debug
 import software.aws.toolkits.jetbrains.core.coroutines.getCoroutineBgContext
 import software.aws.toolkits.jetbrains.services.amazonq.lsp.AmazonQLspService
 import software.aws.toolkits.jetbrains.services.amazonq.lsp.model.aws.textDocument.InlineCompletionItem
-import software.aws.toolkits.jetbrains.services.amazonq.lsp.model.aws.textDocument.InlineCompletionListWithReferences
+import software.aws.toolkits.jetbrains.services.amazonq.lsp.model.aws.textDocument.InlineCompletionReference
+import software.aws.toolkits.jetbrains.services.amazonq.lsp.model.aws.textDocument.InlineCompletionReferencePosition
 import software.aws.toolkits.jetbrains.services.amazonq.profile.QRegionProfileManager
+import software.aws.toolkits.jetbrains.services.codewhisperer.layout.CodeWhispererLayoutConfig.addHorizontalGlue
+import software.aws.toolkits.jetbrains.services.codewhisperer.layout.CodeWhispererLayoutConfig.inlineLabelConstraints
 import software.aws.toolkits.jetbrains.services.codewhisperer.model.TriggerTypeInfo
 import software.aws.toolkits.jetbrains.services.codewhisperer.service.CodeWhispererInvocationStatus
 import software.aws.toolkits.jetbrains.services.codewhisperer.service.CodeWhispererService
-import software.aws.toolkits.jetbrains.services.codewhisperer.util.CodeWhispererConstants
+import software.aws.toolkits.jetbrains.services.codewhisperer.toolwindow.CodeWhispererCodeReferenceManager
 import software.aws.toolkits.jetbrains.utils.isQConnected
-import software.aws.toolkits.jetbrains.utils.sleepWithCancellation
-//import software.aws.toolkits.jetbrains.services.codewhisperer.util.isCodeWhispererEnabled
-//import software.aws.toolkits.jetbrains.services.codewhisperer.util.isQExpired
-//import software.aws.toolkits.jetbrains.services.codewhisperer.util.isValidCodeWhispererFile
+import software.aws.toolkits.resources.message
 import software.aws.toolkits.telemetry.CodewhispererTriggerType
-import java.time.Duration
+import javax.swing.Icon
 import javax.swing.JComponent
+import javax.swing.JEditorPane
 import javax.swing.JLabel
 
 class QInlineCompletionProvider(private val cs: CoroutineScope) : InlineCompletionProvider {
@@ -70,17 +70,177 @@ class QInlineCompletionProvider(private val cs: CoroutineScope) : InlineCompleti
     override val providerPresentation: InlineCompletionProviderPresentation
         get() = object : InlineCompletionProviderPresentation {
             override fun getTooltip(project: Project?): JComponent {
-                return JLabel("Amazon Q internal testing")
-//                TODO("Not yet implemented")
+                project ?: return JLabel()
+                val editor = FileEditorManager.getInstance(project).selectedTextEditor ?: return JLabel()
+                val session = InlineCompletionSession.getOrNull(editor) ?: return JLabel()
+                return qToolTip(
+                    "Amazon Q",
+                    AwsIcons.Logos.AWS_Q_GRADIENT_SMALL,
+                    arrayOf(
+                        object : AnAction("←", null, AllIcons.Chooser.Left), DumbAware {
+                            override fun actionPerformed(e: AnActionEvent) {
+                                session.usePrevVariant()
+                            }
+                        },
+                        object : AnAction("→", null, AllIcons.Chooser.Right), DumbAware {
+                            override fun actionPerformed(e: AnActionEvent) {
+                                session.useNextVariant()
+                            }
+                        }
+                    ),
+                    session,
+                    project
+                )
             }
-
         }
+    private var cell: Cell<JEditorPane>? = null
+
+    fun qToolTip(
+        title: String,
+        icon: Icon?,
+        actions: Array<AnAction>,
+        session: InlineCompletionSession,
+        project: Project
+    ): JComponent {
+        return panel {
+            row {
+                if (icon != null) {
+                    icon(icon).gap(RightGap.SMALL)
+                }
+                comment(title).gap(RightGap.SMALL)
+
+                cell(object : ActionButton(
+                    object : AnAction("←", null, AllIcons.Chooser.Left), DumbAware {
+                        override fun actionPerformed(e: AnActionEvent) {
+                            session.usePrevVariant()
+                        }
+                    },
+                    Presentation().apply {
+                        this.icon = AllIcons.Chooser.Left
+                        putClientProperty(ActionUtil.HIDE_DROPDOWN_ICON, true)
+                    },
+                    ActionPlaces.EDITOR_POPUP,
+                    JBUI.emptySize()
+                ) {
+                    override fun isFocusable() = false
+                }).gap(RightGap.SMALL)
+
+                cell = text("${getCurrentValidVariantIndex(session)}/${getAllValidVariantsCount(session)}").gap(RightGap.SMALL)
+                cell
+
+                cell(object : ActionButton(
+                    object : AnAction("→", null, AllIcons.Chooser.Right), DumbAware {
+                        override fun actionPerformed(e: AnActionEvent) {
+                            session.usePrevVariant()
+                        }
+                    },
+                    Presentation().apply {
+                        this.icon = AllIcons.Chooser.Right
+                        putClientProperty(ActionUtil.HIDE_DROPDOWN_ICON, true)
+                    },
+                    ActionPlaces.EDITOR_POPUP,
+                    JBUI.emptySize()
+                ) {
+                    override fun isFocusable() = false
+                })
+
+                // if there are imports and references, add them here
+                val currentVariant = session.capture()?.activeVariant ?: return@row
+                val item = currentVariant.data.getUserData(KEY_Q_INLINE_ITEM) ?: return@row
+                val imports = item.mostRelevantMissingImports
+//                val references = item.references
+                //data class InlineCompletionReference(
+                //    var referenceName: String,
+                //    var referenceUrl: String,
+                //    var licenseName: String,
+                //    var position: InlineCompletionReferencePosition,
+                //)
+                val references = listOf(
+                    InlineCompletionReference(
+                        referenceName = "myRepo",
+                        referenceUrl = "https://opensource.org/license/mit",
+                        licenseName = "MIT",
+                        position = InlineCompletionReferencePosition(
+                            startCharacter = 0,
+                            endCharacter = 10,
+                        )
+                    ),
+                    InlineCompletionReference(
+                        referenceName = "myRepo2",
+                        referenceUrl = "https://opensource.org/license/bsd-3-clause",
+                        licenseName = "BSD",
+                        position = InlineCompletionReferencePosition(
+                            startCharacter = 11,
+                            endCharacter = 20,
+                        )
+                    ),
+
+                )
+                println("imports: $imports, references: $references")
+                cell(JLabel("2 imports").apply { toolTipText = "<html>import panda as tf<br>import tensorflow as pd</html>" })
+                if (!imports.isNullOrEmpty()) {
+                    cell(JLabel("${imports.size} imports").apply { toolTipText = "import a;\nimport b" })
+                }
+//                val licenseCodePanel = JPanel(GridBagLayout()).apply {
+//                    border = BorderFactory.createEmptyBorder(0, 0, 3, 0)
+//                    add(licenseCodeLabelPrefixText, inlineLabelConstraints)
+//                    add(ActionLink(), inlineLabelConstraints)
+//                    add(codeReferencePanelLink, inlineLabelConstraints)
+//                    addHorizontalGlue()
+//                }
+//                popupComponents.licenseCodePanel.apply {
+//                    removeAll()
+//                    add(popupComponents.licenseCodeLabelPrefixText, inlineLabelConstraints)
+//                    licenses.forEachIndexed { i, license ->
+//                        add(popupComponents.licenseLink(license), inlineLabelConstraints)
+//                        if (i == licenses.size - 1) return@forEachIndexed
+//                        add(JLabel(", "), inlineLabelConstraints)
+//                    }
+//
+//                    add(JLabel(".  "), inlineLabelConstraints)
+//                    add(popupComponents.codeReferencePanelLink, inlineLabelConstraints)
+//                    addHorizontalGlue()
+//                }
+//                cell(JLabel("3 references"))
+                val components = CodeWhispererPopupComponents()
+                if (!references.isNullOrEmpty()) {
+                    cell(JLabel("Reference code under ")).customize(UnscaledGaps.EMPTY)
+                    references.forEachIndexed { i, reference ->
+                        cell(components.licenseLink(reference.licenseName)).customize(UnscaledGaps.EMPTY)
+                        if (i == references.size - 1) return@forEachIndexed
+                        cell(JLabel(", ")).customize(UnscaledGaps.EMPTY)
+                    }
+                    cell(JLabel(". ")).customize(UnscaledGaps.EMPTY)
+                    cell(ActionLink("View Log") {
+                        CodeWhispererCodeReferenceManager.getInstance(project).showCodeReferencePanel()
+
+                    }).gap(RightGap.SMALL)
+                }
+            }
+        }
+    }
+
+    fun getCurrentVariantIndex(session: InlineCompletionSession) = session.capture()?.activeVariant?.index ?: -1
+
+    fun getCurrentValidVariantIndex(session: InlineCompletionSession): Int {
+        var start = 1
+        val variants = session.capture()?.variants ?: return -1
+        variants.forEach {
+            if (it.isActive) return start
+            if (!it.isEmpty() && it.elements.any { element -> element.text.isNotEmpty() }) start++
+//            start++
+        }
+        return -1
+    }
+
+    fun getAllValidVariantsCount(session: InlineCompletionSession) = session.capture()?.variants?.filter {
+        !it.isEmpty() && it.elements.any { element -> element.text.isNotEmpty() }
+    }?.size ?: 0
+
     companion object {
         private const val MAX_CHANNELS = 5
         val Q_INLINE_PROVIDER_ID = InlineCompletionProviderID("Amazon Q")
-//        fun getInstance(): QInlineCompletionProvider {
-//            return QInlineCompletionProvider()
-//        }
+        val KEY_Q_INLINE_ITEM = Key<InlineCompletionItem>("amazon.q.inline.completion.item")
     }
     private val logger = thisLogger()
 
@@ -89,21 +249,6 @@ class QInlineCompletionProvider(private val cs: CoroutineScope) : InlineCompleti
 
     // Track the next available channel index for each session during pagination
     private val sessionChannelCounters = mutableMapOf<String, Int>()
-
-//    fun addPaginatedResults(editor: Editor, event: InlineCompletionEvent, newItems: List<InlineCompletionItem>) {
-//        // Get access to the variants provider (this would need to be exposed)
-//        InlineCompletionSession.getOrNull(editor)?.provider?.suggestionUpdateManager?.update(event) { snapshot ->
-//            // Create new elements from your paginated results
-//            val newElements = newItems.map { item ->
-//                InlineCompletionGrayTextElement(item.insertText)
-//            }
-//
-//            // Return updated snapshot with additional elements
-//            UpdateResult.Changed(
-//                snapshot.copy(elements = snapshot.elements + newElements)
-//            )
-//        }
-//    }
 
     private fun addQInlineCompletionListener(session: InlineCompletionSession, handler: InlineCompletionHandler) {
         handler.addEventListener(object : InlineCompletionEventAdapter {
@@ -117,10 +262,16 @@ class QInlineCompletionProvider(private val cs: CoroutineScope) : InlineCompleti
                 super.onCompletion(event)
             }
 
-//            override fun onShow(event: InlineCompletionEventType.Show) {
-//                println("onShow: all elements are ready")
-//                super.onShow(event)
-//            }
+            override fun onComputed(event: InlineCompletionEventType.Computed) {
+                cell?.applyToComponent { text = "${getCurrentValidVariantIndex(session)}/${getAllValidVariantsCount(session)}" }
+                super.onComputed(event)
+            }
+
+            override fun onShow(event: InlineCompletionEventType.Show) {
+                println("onShow: all elements are ready")
+//                cell?.applyToComponent { text = "${getCurrentValidVariantIndex(session)}/${getAllValidVariantsCount(session)}" }
+                super.onShow(event)
+            }
 
             override fun onInvalidated(event: InlineCompletionEventType.Invalidated) {
                 println("onInvalidated: an variant is invalidated, index: ${event.variantIndex}")
@@ -138,6 +289,11 @@ class QInlineCompletionProvider(private val cs: CoroutineScope) : InlineCompleti
                 // set current index to be seen (might not needed)
                 // event.toVariantIndex
                 println("onVariantSwitched: an variant is switched to show, from: ${event.fromVariantIndex}, to: ${event.toVariantIndex}")
+                if (event.fromVariantIndex > event.toVariantIndex) {
+                    cell?.applyToComponent { text = "${getCurrentValidVariantIndex(session) - 1}/${getAllValidVariantsCount(session)}" }
+                } else {
+                    cell?.applyToComponent { text = "${getCurrentValidVariantIndex(session) + 1}/${getAllValidVariantsCount(session)}" }
+                }
                 super.onVariantSwitched(event)
             }
 
@@ -147,7 +303,7 @@ class QInlineCompletionProvider(private val cs: CoroutineScope) : InlineCompleti
 //            }
 
             override fun onAfterInsert(event: InlineCompletionEventType.AfterInsert) {
-                println("onAfterInsert: after an variant is inserted")
+                println("onAfterInsert: after an variant is inserted, ")
                 // TODO: handle imports and references
                 super.onAfterInsert(event)
             }
@@ -168,7 +324,15 @@ class QInlineCompletionProvider(private val cs: CoroutineScope) : InlineCompleti
                         println("onHide: finish")
                     }
                     InlineCompletionUsageTracker.ShownEvents.FinishType.EMPTY -> {
-                        CodeWhispererInvocationStatus.getInstance().setIsInvokingQInline(session, false)
+                        if (session.request.event is InlineCompletionEvent.ManualCall) {
+                            runInEdt {
+                                HintManager.getInstance().showInformationHint(
+                                    session.editor,
+                                    message("codewhisperer.popup.no_recommendations"),
+                                    HintManager.UNDER
+                                )
+                            }
+                        }
                         // TODO: send empty
                     }
                     InlineCompletionUsageTracker.ShownEvents.FinishType.INVALIDATED -> {
@@ -210,11 +374,12 @@ class QInlineCompletionProvider(private val cs: CoroutineScope) : InlineCompleti
         val project = editor.project ?: return InlineCompletionSuggestion.Empty
         val handler = InlineCompletion.getHandlerOrNull(editor) ?: return InlineCompletionSuggestion.Empty
         val session = InlineCompletionSession.getOrNull(editor) ?: return InlineCompletionSuggestion.Empty
+        val qInlineItemsMap = mutableMapOf<Int, InlineCompletionItem>()
         CodeWhispererInvocationStatus.getInstance().setIsInvokingQInline(session, true)
-        Disposer.register(session, {
-//            CodeWhispererInvocationStatus.getInstance().setIsInvokingQInline(session, false)
+        Disposer.register(session) {
+            CodeWhispererInvocationStatus.getInstance().setIsInvokingQInline(session, false)
             // potentially send UTDE here?
-        })
+        }
         addQInlineCompletionListener(session, handler)
 
         logger.debug("Getting inline completion suggestion for offset: ${request.endOffset}")
@@ -251,13 +416,16 @@ class QInlineCompletionProvider(private val cs: CoroutineScope) : InlineCompleti
 //            )
 
             if (completion.items.isEmpty()) {
-                logger.debug("No completions received from LSP server")
+                logger.debug("No completions received from LSP server, nextToken: ${completion.partialResultToken}")
                 return InlineCompletionSuggestion.Empty
             }
 
             logger.debug("Received ${completion.items.size} completions, nextToken: ${completion.partialResultToken}")
 
             // Store completion state for telemetry and import handling
+            completion.items.forEachIndexed { i, item ->
+                qInlineItemsMap[i] = item
+            }
             QInlineCompletionStateManager.getInstance(project).storeCompletionState(
                 completion.sessionId,
                 completion,
@@ -282,7 +450,7 @@ class QInlineCompletionProvider(private val cs: CoroutineScope) : InlineCompleti
 
             return object : InlineCompletionSuggestion {
                 override suspend fun getVariants(): List<InlineCompletionVariant> {
-                    // HACK: Always return exactly 5 variants (5 channels)
+                    // Pagination workaround: Always return exactly 5 variants (5 channels)
                     // Initialize channel counter for this session
                     sessionChannelCounters[completion.sessionId] = completion.items.size
                     logger.debug("Initialized session ${completion.sessionId} with ${completion.items.size} initial items, creating $MAX_CHANNELS channels")
@@ -290,6 +458,7 @@ class QInlineCompletionProvider(private val cs: CoroutineScope) : InlineCompleti
                     return (0 until MAX_CHANNELS).map { channelIndex ->
                         val channel = Channel<InlineCompletionElement>(Channel.UNLIMITED)
                         val flow = channel.receiveAsFlow()
+                        val data = UserDataHolderBase()
 
                         // Store the channel with unique key for each channel index
                         val channelKey = "${completion.sessionId}_$channelIndex"
@@ -298,6 +467,7 @@ class QInlineCompletionProvider(private val cs: CoroutineScope) : InlineCompleti
                         // Emit initial element if we have an item for this channel
                         if (channelIndex < completion.items.size) {
                             val item = completion.items[channelIndex]
+                            data.putUserData(KEY_Q_INLINE_ITEM, item)
                             channel.trySend(InlineCompletionGrayTextElement(item.insertText))
                             logger.debug("Channel $channelIndex: Initial item '${item.itemId}' with text: ${item.insertText.take(50)}...")
                         } else {
@@ -305,7 +475,7 @@ class QInlineCompletionProvider(private val cs: CoroutineScope) : InlineCompleti
                             logger.debug("Channel $channelIndex: Created as placeholder, waiting for pagination")
                         }
 
-                        InlineCompletionVariant.build(elements = flow)
+                        InlineCompletionVariant.build(data = data, elements = flow)
                     }
                 }
             }
@@ -332,7 +502,7 @@ class QInlineCompletionProvider(private val cs: CoroutineScope) : InlineCompleti
         session: InlineCompletionSession,
     ) {
         // Launch coroutine for background pagination
-        sleepCancellable(3000)
+//        sleepCancellable(3000)
         withContext(getCoroutineBgContext()) {
 //        GlobalScope.launch(getCoroutineBgContext()) {
             var nextToken: Either<String, Int>? = initialNextToken
