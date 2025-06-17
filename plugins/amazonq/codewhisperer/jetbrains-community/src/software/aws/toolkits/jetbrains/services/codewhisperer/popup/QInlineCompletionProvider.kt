@@ -125,7 +125,7 @@ class QInlineCompletionProvider(private val cs: CoroutineScope) : InlineCompleti
                     override fun isFocusable() = false
                 }).gap(RightGap.SMALL)
 
-                cell = text("${getCurrentValidVariantIndex(session)}/${getAllValidVariantsCount(session)}").gap(RightGap.SMALL)
+                cell = text("${getDisplayVariantIndex(session, 0)}/${getAllValidVariantsCount(session)}").gap(RightGap.SMALL)
                 cell
 
                 cell(object : ActionButton(
@@ -210,27 +210,25 @@ class QInlineCompletionProvider(private val cs: CoroutineScope) : InlineCompleti
                         if (i == references.size - 1) return@forEachIndexed
                         cell(JLabel(", ")).customize(UnscaledGaps.EMPTY)
                     }
-                    cell(JLabel(". ")).customize(UnscaledGaps.EMPTY)
-                    cell(ActionLink("View Log") {
-                        CodeWhispererCodeReferenceManager.getInstance(project).showCodeReferencePanel()
-
-                    }).gap(RightGap.SMALL)
+                    cell(JLabel(". ")).gap(RightGap.SMALL)
                 }
             }
         }
     }
 
-    fun getCurrentVariantIndex(session: InlineCompletionSession) = session.capture()?.activeVariant?.index ?: -1
+    fun getDisplayVariantIndex(session: InlineCompletionSession, direction: Int): Int {
+        return getCurrentValidVariantIndex(session, direction) + 1
+    }
 
-    fun getCurrentValidVariantIndex(session: InlineCompletionSession): Int {
-        var start = 1
+    private fun getCurrentValidVariantIndex(session: InlineCompletionSession, direction: Int): Int {
         val variants = session.capture()?.variants ?: return -1
-        variants.forEach {
-            if (it.isActive) return start
-            if (!it.isEmpty() && it.elements.any { element -> element.text.isNotEmpty() }) start++
-//            start++
+        // the variants snapshots at this point either 1) have elements(normal case) 2) have no elements but have
+        // data (trySend(elements) hasn't finished), so need to check both
+        val validVariants = variants.filter {
+            (!it.isEmpty() && it.elements.any { element -> element.text.isNotEmpty() }) ||
+                    it.data.getUserData(KEY_Q_INLINE_ITEM) != null
         }
-        return -1
+        return (validVariants.indexOfFirst { it.isActive } + direction + validVariants.size) % validVariants.size
     }
 
     fun getAllValidVariantsCount(session: InlineCompletionSession) = session.capture()?.variants?.filter {
@@ -258,18 +256,18 @@ class QInlineCompletionProvider(private val cs: CoroutineScope) : InlineCompleti
                 // 1. change invocation status
                 // 2. refer to CodeWhispererPopupManager to see what we do after session end
                 CodeWhispererInvocationStatus.getInstance().setIsInvokingQInline(session, false)
+                cell?.applyToComponent { text = "${getDisplayVariantIndex(session, 0)}/${getAllValidVariantsCount(session)}" }
                 println("---------------------------------------onCompletion: all computations are done-------------------------------------------")
                 super.onCompletion(event)
             }
 
             override fun onComputed(event: InlineCompletionEventType.Computed) {
-                cell?.applyToComponent { text = "${getCurrentValidVariantIndex(session)}/${getAllValidVariantsCount(session)}" }
+                cell?.applyToComponent { text = "${getDisplayVariantIndex(session, 0)}/${getAllValidVariantsCount(session)}" }
                 super.onComputed(event)
             }
 
             override fun onShow(event: InlineCompletionEventType.Show) {
                 println("onShow: all elements are ready")
-//                cell?.applyToComponent { text = "${getCurrentValidVariantIndex(session)}/${getAllValidVariantsCount(session)}" }
                 super.onShow(event)
             }
 
@@ -289,11 +287,8 @@ class QInlineCompletionProvider(private val cs: CoroutineScope) : InlineCompleti
                 // set current index to be seen (might not needed)
                 // event.toVariantIndex
                 println("onVariantSwitched: an variant is switched to show, from: ${event.fromVariantIndex}, to: ${event.toVariantIndex}")
-                if (event.fromVariantIndex > event.toVariantIndex) {
-                    cell?.applyToComponent { text = "${getCurrentValidVariantIndex(session) - 1}/${getAllValidVariantsCount(session)}" }
-                } else {
-                    cell?.applyToComponent { text = "${getCurrentValidVariantIndex(session) + 1}/${getAllValidVariantsCount(session)}" }
-                }
+                val steps = event.toVariantIndex - event.fromVariantIndex
+                cell?.applyToComponent { text = "${(getDisplayVariantIndex(session, steps))}/${getAllValidVariantsCount(session)}" }
                 super.onVariantSwitched(event)
             }
 
